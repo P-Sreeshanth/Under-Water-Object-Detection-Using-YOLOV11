@@ -1,0 +1,43 @@
+# Core FastAPI dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+python-multipart==0.0.6
+
+# Deep Learning frameworks
+torch==2.1.0
+torchvision==0.16.0
+ultralytics==8.1.0
+
+# Image processing
+opencv-python==4.8.1.78
+numpy==1.24.3
+pillow==10.1.0
+
+# Data validation
+pydantic==2.5.0
+pydantic-settings==2.1.0
+
+# Utilities
+python-jose==3.3.0
+python-dotenv==1.0.0
+aiofiles==23.2.1
+
+# Logging and monitoring
+structlog==23.2.0
+
+# Rate limiting
+slowapi==0.1.9
+
+# CORS
+# Already included in fastapi
+
+# Testing (optional)
+pytest==7.4.3
+httpx==0.25.2
+
+# Training dependencies
+tqdm==4.66.1
+matplotlib==3.8.2
+seaborn==0.13.0
+tensorboard==2.15.1
+kagglehub==0.2.0

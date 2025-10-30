@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: underwater-analysis-api
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount model files (read-only)
+      - ./models:/app/models:ro
+      # Mount static files for persistence
+      - ./static:/app/static
+      # Mount logs
+      - ./logs:/app/logs
+    environment:
+      - HOST=0.0.0.0
+      - PORT=8000
+      - LOG_LEVEL=INFO
+      - ENHANCER_MODEL_PATH=models/enhancer_model.pth
+      - DETECTOR_MODEL_PATH=models/best.pt
+      - CONFIDENCE_THRESHOLD=0.5
+      - NMS_THRESHOLD=0.45
+      - MAX_FILE_SIZE_MB=10.0
+      - RATE_LIMIT_PER_MINUTE=60
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+networks:
+  default:
+    name: underwater-analysis-network

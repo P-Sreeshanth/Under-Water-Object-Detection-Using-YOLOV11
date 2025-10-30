@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Underwater Image Analysis</title>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🐠 Underwater Image Analysis System</h1>
+            <p class="subtitle">AI-powered detection for marine life and objects</p>
+        </header>
+
+        <div class="main-content">
+            <!-- Upload Section -->
+            <div class="upload-section">
+                <div class="upload-area" id="uploadArea">
+                    <svg class="upload-icon" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                    <p class="upload-text">Drag & drop an image here or click to select</p>
+                    <p class="upload-hint">Supports JPG, PNG, JPEG formats</p>
+                    <input type="file" id="fileInput" accept="image/jpeg,image/png,image/jpg" style="display: none;">
+                </div>
+
+                <div class="controls">
+                    <label class="control-item">
+                        <input type="checkbox" id="enhanceToggle" checked>
+                        <span>Enable Image Enhancement</span>
+                    </label>
+                    <label class="control-item">
+                        <span>Confidence Threshold: <span id="confidenceValue">0.25</span></span>
+                        <input type="range" id="confidenceSlider" min="0" max="100" value="25" step="1">
+                    </label>
+                </div>
+            </div>
+
+            <!-- Results Section -->
+            <div class="results-section" id="resultsSection" style="display: none;">
+                <div class="results-header">
+                    <h2>Analysis Results</h2>
+                    <button class="btn-secondary" id="clearBtn">Clear & Analyze Another</button>
+                </div>
+
+                <div class="results-grid">
+                    <!-- Original Image -->
+                    <div class="result-card">
+                        <h3>Original Image</h3>
+                        <div class="image-container">
+                            <img id="originalImage" alt="Original">
+                        </div>
+                    </div>
+
+                    <!-- Analyzed Image -->
+                    <div class="result-card">
+                        <h3>Detected Objects</h3>
+                        <div class="image-container">
+                            <canvas id="analyzedCanvas"></canvas>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Detection Details -->
+                <div class="detections-panel">
+                    <h3>Detection Details</h3>
+                    <div class="stats-grid">
+                        <div class="stat-card">
+                            <div class="stat-value" id="totalDetections">0</div>
+                            <div class="stat-label">Total Detections</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="uniqueClasses">0</div>
+                            <div class="stat-label">Unique Classes</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="avgConfidence">0%</div>
+                            <div class="stat-label">Avg Confidence</div>
+                        </div>
+                        <div class="stat-card">
+                            <div class="stat-value" id="processingTime">0ms</div>
+                            <div class="stat-label">Processing Time</div>
+                        </div>
+                    </div>
+
+                    <div class="detections-list" id="detectionsList"></div>
+                </div>
+            </div>
+
+            <!-- Loading Overlay -->
+            <div class="loading-overlay" id="loadingOverlay" style="display: none;">
+                <div class="loader"></div>
+                <p>Analyzing image...</p>
+            </div>
+
+            <!-- Error Message -->
+            <div class="error-message" id="errorMessage" style="display: none;">
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span id="errorText"></span>
+            </div>
+        </div>
+
+        <!-- System Status -->
+        <footer>
+            <div class="status-bar">
+                <span class="status-item">
+                    <span class="status-indicator" id="apiStatus"></span>
+                    API Status: <span id="apiStatusText">Checking...</span>
+                </span>
+                <span class="status-item">
+                    Model: YOLOv11-nano
+                </span>
+                <span class="status-item">
+                    Classes: <span id="classCount">7</span>
+                </span>
+            </div>
+        </footer>
+    </div>
+
+    <script src="/static/app.js"></script>
+</body>
+</html>
