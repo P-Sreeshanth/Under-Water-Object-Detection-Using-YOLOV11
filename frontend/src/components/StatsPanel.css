@@ -1,0 +1,184 @@
+.stats-panel {
+  background: rgba(15, 23, 42, 0.8);
+  border: 1px solid rgba(0, 212, 255, 0.3);
+  border-radius: 12px;
+  overflow: hidden;
+  backdrop-filter: blur(10px);
+  transition: all 0.3s ease;
+}
+
+.stats-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+
+.stat-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 15px;
+  background: rgba(0, 212, 255, 0.05);
+  border: 1px solid rgba(0, 212, 255, 0.2);
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+  background: rgba(0, 212, 255, 0.1);
+  border-color: rgba(0, 212, 255, 0.4);
+  transform: translateX(5px);
+}
+
+.stat-icon-wrapper {
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(0, 212, 255, 0.2), rgba(0, 153, 255, 0.2));
+  border-radius: 8px;
+}
+
+.stat-icon {
+  width: 20px;
+  height: 20px;
+  color: #00d4ff;
+}
+
+.stat-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.stat-label {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.5);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  font-weight: 600;
+}
+
+.stat-number {
+  font-family: 'Orbitron', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #00d4ff;
+  text-shadow: 0 0 10px rgba(0, 212, 255, 0.3);
+}
+
+.model-distribution {
+  padding-top: 20px;
+  border-top: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.distribution-title,
+.status-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: rgba(255, 255, 255, 0.6);
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  margin-bottom: 15px;
+}
+
+.distribution-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+}
+
+.bar-item {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.bar-label {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12px;
+}
+
+.bar-name {
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 600;
+}
+
+.bar-value {
+  font-family: 'Orbitron', sans-serif;
+  font-weight: 700;
+  color: #00d4ff;
+}
+
+.bar-track {
+  height: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.5s ease;
+}
+
+.bar-fill.seaclear {
+  background: linear-gradient(90deg, #ffaa00, #ff8800);
+  box-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+}
+
+.bar-fill.aquarium {
+  background: linear-gradient(90deg, #00d4ff, #0099ff);
+  box-shadow: 0 0 10px rgba(0, 212, 255, 0.5);
+}
+
+.model-status {
+  padding-top: 20px;
+  border-top: 1px solid rgba(0, 212, 255, 0.2);
+}
+
+.status-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.status-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 6px;
+  transition: all 0.3s ease;
+}
+
+.status-item.active .status-dot {
+  background: #00ff88;
+  box-shadow: 0 0 10px #00ff88;
+  animation: pulse 2s infinite;
+}
+
+.status-item.inactive .status-dot {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.status-name {
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.8);
+  font-weight: 500;
+}
+
+.status-item.active .status-name {
+  color: rgba(255, 255, 255, 1);
+}

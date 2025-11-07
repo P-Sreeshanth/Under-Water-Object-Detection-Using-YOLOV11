@@ -169,12 +169,15 @@ async def health_check():
     """
     global model_manager
     
-    models_loaded = {"enhancer": False, "detector": False}
+    models_loaded = {"enhancer": False, "seaclear": False}
     
     if model_manager is not None:
         models_loaded = model_manager.is_ready()
     
-    status = "healthy" if all(models_loaded.values()) or models_loaded["detector"] else "degraded"
+    # Determine health status
+    # System is healthy if at least seaclear model is loaded
+    has_detection_model = models_loaded.get("seaclear", False) or models_loaded.get("aquarium", False)
+    status = "healthy" if has_detection_model else "degraded"
     
     return HealthResponse(
         status=status,

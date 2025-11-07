@@ -47,6 +47,25 @@ models/*.pt
 models/*.onnx
 models/*.h5
 
+# YOLO model weights (large files)
+*.pt
+yolo11*.pt
+runs/
+!runs/.gitkeep
+
+# Dataset files (large)
+seaclear_dataset/
+combined_dataset/
+*.jpg
+*.png
+*.jpeg
+!frontend/public/*.png
+!frontend/public/*.jpg
+
+# Node modules
+node_modules/
+frontend/node_modules/
+
 # Static files (generated)
 static/*.jpg
 static/*.png

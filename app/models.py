@@ -104,8 +104,8 @@ class ModelManager:
     
     This class handles:
     - Loading the U-Net enhancement model
-    - Loading the YOLOv11 detection model
-    - Running inference on images
+    - Loading multiple YOLOv11 detection models (Seaclear + Aquarium)
+    - Running inference on images with ensemble detection
     - Managing GPU/CPU device selection
     """
     
@@ -115,19 +115,26 @@ class ModelManager:
         logger.info(f"Using device: {self.device}")
         
         self.enhancer_model = None
-        self.detector_model = None
+        self.seaclear_model = None
+        self.aquarium_model = None
         self.class_names = {}
         
         self._load_models()
     
     def _load_models(self):
-        """Load both enhancement and detection models."""
+        """Load enhancement and detection models."""
         try:
             # Load U-Net enhancement model
             self._load_enhancer()
             
-            # Load YOLOv11 detection model
-            self._load_detector()
+            # Load detection models
+            if settings.USE_MULTI_MODEL:
+                logger.info("Loading multi-model detection (Seaclear + Aquarium)")
+                self._load_seaclear_model()
+                self._load_aquarium_model()
+            else:
+                # Legacy single model support
+                self._load_seaclear_model()
             
             logger.info("All models loaded successfully")
             
@@ -176,32 +183,63 @@ class ModelManager:
             self.enhancer_model = None
     
     def _load_detector(self):
-        """Load the YOLOv11 object detection model."""
-        detector_path = Path(settings.DETECTOR_MODEL_PATH)
+        """Load the YOLOv11 object detection model (legacy - for backward compatibility)."""
+        self._load_seaclear_model()
+    
+    def _load_seaclear_model(self):
+        """Load the Seaclear marine debris detection model."""
+        seaclear_path = Path(settings.SEACLEAR_MODEL_PATH)
         
-        if not detector_path.exists():
-            raise FileNotFoundError(
-                f"Detector model not found at {detector_path}. "
-                "Please ensure the YOLOv11 model file exists."
-            )
+        if not seaclear_path.exists():
+            logger.warning(f"Seaclear model not found at {seaclear_path}")
+            self.seaclear_model = None
+            return
         
         try:
-            # Load YOLOv11 model using ultralytics
-            self.detector_model = YOLO(str(detector_path))
+            self.seaclear_model = YOLO(str(seaclear_path))
             
-            # Move to appropriate device
             if self.device.type == 'cuda':
-                self.detector_model.to('cuda')
+                self.seaclear_model.to('cuda')
             
-            # Extract class names
-            self.class_names = self.detector_model.names
+            # Extract class names with seaclear prefix
+            seaclear_names = self.seaclear_model.names
+            for class_id, class_name in seaclear_names.items():
+                self.class_names[f"seaclear_{class_id}"] = f"seaclear_{class_name}"
             
-            logger.info(f"YOLOv11 detector loaded from {detector_path}")
-            logger.info(f"Detected classes: {self.class_names}")
+            logger.info(f"Seaclear model loaded from {seaclear_path}")
+            logger.info(f"Seaclear classes: {len(seaclear_names)}")
             
         except Exception as e:
-            logger.error(f"Failed to load detector model: {e}")
-            raise
+            logger.error(f"Failed to load Seaclear model: {e}")
+            self.seaclear_model = None
+    
+    def _load_aquarium_model(self):
+        """Load the Aquarium animals detection model."""
+        aquarium_path = Path(settings.AQUARIUM_MODEL_PATH)
+        
+        if not aquarium_path.exists():
+            logger.warning(f"Aquarium model not found at {aquarium_path}")
+            self.aquarium_model = None
+            return
+        
+        try:
+            self.aquarium_model = YOLO(str(aquarium_path))
+            
+            if self.device.type == 'cuda':
+                self.aquarium_model.to('cuda')
+            
+            # Extract class names with aquarium prefix
+            aquarium_names = self.aquarium_model.names
+            offset = len(self.class_names)
+            for class_id, class_name in aquarium_names.items():
+                self.class_names[f"aquarium_{class_id}"] = f"aquarium_{class_name}"
+            
+            logger.info(f"Aquarium model loaded from {aquarium_path}")
+            logger.info(f"Aquarium classes: {len(aquarium_names)}")
+            
+        except Exception as e:
+            logger.error(f"Failed to load Aquarium model: {e}")
+            self.aquarium_model = None
     
     def enhance_image(self, image: np.ndarray) -> np.ndarray:
         """
@@ -245,7 +283,10 @@ class ModelManager:
         nms_threshold: float = None
     ) -> Tuple[List[Dict], np.ndarray]:
         """
-        Detect objects in image using YOLOv11 model.
+        Detect objects in image using YOLOv11 model(s).
+        
+        If multi-model mode is enabled, runs both Seaclear and Aquarium models
+        and combines the results.
         
         Args:
             image: Input image in BGR format
@@ -255,9 +296,6 @@ class ModelManager:
         Returns:
             Tuple of (detections_list, annotated_image)
         """
-        if self.detector_model is None:
-            raise RuntimeError("Detector model not loaded")
-        
         # Use default thresholds if not provided
         if confidence_threshold is None:
             confidence_threshold = settings.CONFIDENCE_THRESHOLD
@@ -265,54 +303,116 @@ class ModelManager:
             nms_threshold = settings.NMS_THRESHOLD
         
         try:
-            # Run YOLOv11 inference
-            results = self.detector_model.predict(
-                image,
-                conf=confidence_threshold,
-                iou=nms_threshold,
-                verbose=False
-            )
+            all_detections = []
+            annotated_image = image.copy()
             
-            # Process results
-            detections = []
+            # Run Seaclear model
+            if self.seaclear_model is not None:
+                logger.info("Running Seaclear model detection")
+                seaclear_detections, seaclear_annotated = self._run_single_model(
+                    self.seaclear_model,
+                    image,
+                    confidence_threshold,
+                    nms_threshold,
+                    model_prefix="seaclear"
+                )
+                all_detections.extend(seaclear_detections)
+                annotated_image = seaclear_annotated
             
-            if len(results) > 0:
-                result = results[0]  # Get first result
+            # Run Aquarium model (if multi-model mode)
+            if settings.USE_MULTI_MODEL and self.aquarium_model is not None:
+                logger.info("Running Aquarium model detection")
+                aquarium_detections, aquarium_annotated = self._run_single_model(
+                    self.aquarium_model,
+                    image,
+                    confidence_threshold,
+                    nms_threshold,
+                    model_prefix="aquarium"
+                )
                 
-                # Extract boxes
-                if result.boxes is not None and len(result.boxes) > 0:
-                    boxes = result.boxes
+                # Combine detections
+                all_detections.extend(aquarium_detections)
+                
+                # Merge annotations (draw aquarium detections on existing image)
+                for det in aquarium_detections:
+                    x1, y1, x2, y2 = det['bbox']
+                    label = f"{det['class_name']} {det['confidence']:.2f}"
                     
-                    for box in boxes:
-                        # Get box coordinates
-                        x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
-                        
-                        # Get confidence and class
-                        confidence = float(box.conf[0].cpu().numpy())
-                        class_id = int(box.cls[0].cpu().numpy())
-                        
-                        detection = {
-                            'bbox': [int(x1), int(y1), int(x2), int(y2)],
-                            'confidence': confidence,
-                            'class_id': class_id,
-                            'class_name': self.class_names.get(class_id, f"Class_{class_id}")
-                        }
-                        
-                        detections.append(detection)
-                
-                # Get annotated image from YOLO
-                annotated_image = result.plot()
-                # Convert RGB to BGR for consistency
-                annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
-            else:
-                annotated_image = image.copy()
+                    # Draw box (different color for aquarium)
+                    cv2.rectangle(annotated_image, (x1, y1), (x2, y2), (0, 255, 255), 2)
+                    cv2.putText(annotated_image, label, (x1, y1 - 10),
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 255), 2)
             
-            logger.info(f"Detected {len(detections)} objects")
-            return detections, annotated_image
+            logger.info(f"Total detections: {len(all_detections)} (Seaclear + Aquarium)")
+            return all_detections, annotated_image
             
         except Exception as e:
             logger.error(f"Error during object detection: {e}")
             raise
+    
+    def _run_single_model(
+        self,
+        model: YOLO,
+        image: np.ndarray,
+        confidence_threshold: float,
+        nms_threshold: float,
+        model_prefix: str = ""
+    ) -> Tuple[List[Dict], np.ndarray]:
+        """
+        Run inference on a single YOLO model.
+        
+        Args:
+            model: YOLO model instance
+            image: Input image
+            confidence_threshold: Confidence threshold
+            nms_threshold: NMS threshold
+            model_prefix: Prefix for class names
+            
+        Returns:
+            Tuple of (detections, annotated_image)
+        """
+        # Run YOLOv11 inference
+        results = model.predict(
+            image,
+            conf=confidence_threshold,
+            iou=nms_threshold,
+            verbose=False
+        )
+        
+        detections = []
+        
+        if len(results) > 0:
+            result = results[0]
+            
+            if result.boxes is not None and len(result.boxes) > 0:
+                boxes = result.boxes
+                
+                for box in boxes:
+                    x1, y1, x2, y2 = box.xyxy[0].cpu().numpy()
+                    confidence = float(box.conf[0].cpu().numpy())
+                    class_id = int(box.cls[0].cpu().numpy())
+                    
+                    class_name = model.names.get(class_id, f"Class_{class_id}")
+                    if model_prefix:
+                        class_name = f"{model_prefix}_{class_name}"
+                    
+                    detection = {
+                        'bbox': [int(x1), int(y1), int(x2), int(y2)],
+                        'confidence': confidence,
+                        'class_id': class_id,
+                        'class_name': class_name,
+                        'model': model_prefix
+                    }
+                    
+                    detections.append(detection)
+            
+            # Get annotated image
+            annotated_image = result.plot()
+            annotated_image = cv2.cvtColor(annotated_image, cv2.COLOR_RGB2BGR)
+        else:
+            annotated_image = image.copy()
+        
+        return detections, annotated_image
     
     def analyze_image(
         self,
@@ -364,16 +464,33 @@ class ModelManager:
         Returns:
             Dictionary with model status
         """
-        return {
+        status = {
             "enhancer": self.enhancer_model is not None,
-            "detector": self.detector_model is not None
+            "seaclear": self.seaclear_model is not None
         }
+        
+        if settings.USE_MULTI_MODEL:
+            status["aquarium"] = self.aquarium_model is not None
+        
+        return status
     
     def get_class_names(self) -> Dict[int, str]:
         """
-        Get the class names dictionary.
+        Get combined class names from all loaded models.
         
         Returns:
-            Dictionary mapping class IDs to names
+            Dictionary mapping class IDs to names with model prefixes
         """
-        return self.class_names
+        combined_classes = {}
+        
+        # Add Seaclear classes
+        if self.seaclear_model is not None:
+            for class_id, class_name in self.seaclear_model.names.items():
+                combined_classes[f"seaclear_{class_id}"] = f"seaclear_{class_name}"
+        
+        # Add Aquarium classes if multi-model
+        if settings.USE_MULTI_MODEL and self.aquarium_model is not None:
+            for class_id, class_name in self.aquarium_model.names.items():
+                combined_classes[f"aquarium_{class_id}"] = f"aquarium_{class_name}"
+        
+        return combined_classes

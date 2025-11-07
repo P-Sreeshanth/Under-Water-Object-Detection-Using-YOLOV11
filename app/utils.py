@@ -30,10 +30,14 @@ class Settings(BaseSettings):
     
     # Model paths
     ENHANCER_MODEL_PATH: str = "models/enhancer_model.pth"
-    DETECTOR_MODEL_PATH: str = "models/best.pt"
+    SEACLEAR_MODEL_PATH: str = "runs/seaclear/yolov11n_seaclear/weights/best.pt"
+    AQUARIUM_MODEL_PATH: str = "runs/detect/aquarium_yolov11/weights/best.pt"  # Your aquarium trained model
+    
+    # Multi-model mode
+    USE_MULTI_MODEL: bool = True  # Set to True to use both models
     
     # Detection settings
-    CONFIDENCE_THRESHOLD: float = 0.5
+    CONFIDENCE_THRESHOLD: float = 0.25  # Lowered for better recall on Seaclear dataset
     NMS_THRESHOLD: float = 0.45
     
     # File upload settings
