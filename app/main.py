@@ -6,11 +6,18 @@ and object detection using U-Net and YOLOv11 models.
 """
 
 import time
+import json
+import base64
+import queue
+import asyncio
+import threading
+from dataclasses import dataclass
 from typing import Optional
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI, File, UploadFile, HTTPException, Request
+import cv2
+from fastapi import FastAPI, File, UploadFile, HTTPException, Request, Form, WebSocket, WebSocketDisconnect, Query
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -43,6 +50,180 @@ model_manager: Optional[ModelManager] = None
 
 # Rate limiter
 limiter = Limiter(key_func=get_remote_address)
+
+
+@dataclass
+class StreamStats:
+    """Runtime counters for a single WebSocket stream session."""
+
+    captured: int = 0
+    processed: int = 0
+    sent: int = 0
+    dropped_capture: int = 0
+    dropped_output: int = 0
+
+
+class RealtimeVideoSession:
+    """Producer-consumer streaming session with bounded queues.
+
+    Architecture:
+    - Producer thread: capture frames continuously via OpenCV
+    - Consumer thread: run model inference, encode JPEG, push to output queue
+    - Async sender: reads output queue and writes to WebSocket
+    """
+
+    def __init__(
+        self,
+        source,
+        confidence_threshold: float,
+        nms_threshold: float,
+        enhance: bool,
+        jpeg_quality: int = 80,
+        queue_size: int = 2,
+    ):
+        self.source = source
+        self.confidence_threshold = confidence_threshold
+        self.nms_threshold = nms_threshold
+        self.enhance = enhance
+        self.jpeg_quality = int(jpeg_quality)
+        self.stop_event = threading.Event()
+
+        # Keep queues tiny to cap memory and prioritize newest frames.
+        self.capture_queue: queue.Queue = queue.Queue(maxsize=max(1, int(queue_size)))
+        self.output_queue: queue.Queue = queue.Queue(maxsize=max(1, int(queue_size)))
+        self.stats = StreamStats()
+        self.last_error: Optional[str] = None
+
+        self.producer_thread: Optional[threading.Thread] = None
+        self.consumer_thread: Optional[threading.Thread] = None
+
+    @staticmethod
+    def parse_source(source_text: str):
+        source_text = (source_text or "0").strip()
+        if source_text.isdigit():
+            return int(source_text)
+        return source_text
+
+    @staticmethod
+    def _drop_oldest_put(q: queue.Queue, item) -> bool:
+        dropped = False
+        if q.full():
+            try:
+                q.get_nowait()
+                dropped = True
+            except queue.Empty:
+                pass
+        q.put_nowait(item)
+        return dropped
+
+    def _capture_loop(self):
+        cap = cv2.VideoCapture(self.source)
+
+        # Hardware acceleration note:
+        # If your OpenCV build supports accelerated decode, configure it here.
+        # For low-latency sources, forcing small capture buffers may help:
+        # cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+
+        if not cap.isOpened():
+            self.last_error = f"Failed to open video source: {self.source}"
+            logger.error(self.last_error)
+            self.stop_event.set()
+            return
+
+        try:
+            while not self.stop_event.is_set():
+                ok, frame = cap.read()
+                if not ok:
+                    # File source: loop back to start. Stream source: small backoff.
+                    if isinstance(self.source, str) and Path(self.source).exists():
+                        cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+                    else:
+                        time.sleep(0.01)
+                    continue
+
+                self.stats.captured += 1
+                if self._drop_oldest_put(self.capture_queue, frame):
+                    self.stats.dropped_capture += 1
+        except Exception as e:
+            self.last_error = f"Capture error: {e}"
+            logger.error(self.last_error, exc_info=True)
+            self.stop_event.set()
+        finally:
+            cap.release()
+
+    def _inference_loop(self):
+        global model_manager
+
+        try:
+            while not self.stop_event.is_set():
+                try:
+                    frame = self.capture_queue.get(timeout=0.2)
+                except queue.Empty:
+                    continue
+
+                if model_manager is None:
+                    self.last_error = "Models not loaded. Service unavailable."
+                    self.stop_event.set()
+                    break
+
+                # YOLO acceleration note:
+                # model_manager automatically uses CUDA when torch.cuda.is_available().
+                annotated_image, detections, _ = model_manager.analyze_image(
+                    frame,
+                    confidence_threshold=self.confidence_threshold,
+                    nms_threshold=self.nms_threshold,
+                    enhance=self.enhance,
+                )
+
+                self.stats.processed += 1
+                ok, encoded = cv2.imencode(
+                    ".jpg",
+                    annotated_image,
+                    [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality],
+                )
+                if not ok:
+                    continue
+
+                frame_b64 = base64.b64encode(encoded.tobytes()).decode("ascii")
+                payload = json.dumps(
+                    {
+                        "type": "frame",
+                        "image": frame_b64,
+                        "detections": detections,
+                        "stats": {
+                            "captured": self.stats.captured,
+                            "processed": self.stats.processed,
+                            "sent": self.stats.sent,
+                            "dropped_capture": self.stats.dropped_capture,
+                            "dropped_output": self.stats.dropped_output,
+                        },
+                    }
+                )
+
+                if self._drop_oldest_put(self.output_queue, payload):
+                    self.stats.dropped_output += 1
+        except Exception as e:
+            self.last_error = f"Inference error: {e}"
+            logger.error(self.last_error, exc_info=True)
+            self.stop_event.set()
+
+    def start(self):
+        self.producer_thread = threading.Thread(target=self._capture_loop, daemon=True, name="stream-producer")
+        self.consumer_thread = threading.Thread(target=self._inference_loop, daemon=True, name="stream-consumer")
+        self.producer_thread.start()
+        self.consumer_thread.start()
+
+    def stop(self):
+        self.stop_event.set()
+        for t in (self.producer_thread, self.consumer_thread):
+            if t and t.is_alive():
+                t.join(timeout=1.0)
+
+    def get_payload_nowait(self) -> Optional[str]:
+        try:
+            return self.output_queue.get_nowait()
+        except queue.Empty:
+            return None
 
 
 @asynccontextmanager
@@ -89,11 +270,6 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Mount static files for web interface
-static_path = Path(__file__).parent.parent / "static"
-if static_path.exists():
-    app.mount("/static", StaticFiles(directory=str(static_path)), name="static")
-
 # Add rate limiting
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -107,8 +283,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Mount static files directory
-app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
+# Mount static files directory once
+if settings.STATIC_DIR and Path(settings.STATIC_DIR).exists():
+    app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
 
 
 @app.exception_handler(HTTPException)
@@ -202,13 +379,88 @@ async def get_config():
     )
 
 
+@app.websocket("/ws/stream")
+async def websocket_stream(
+    websocket: WebSocket,
+    source: str = Query(default="0", description="Camera index, local file path, or RTSP URL"),
+    confidence_threshold: float = Query(default=0.25, ge=0.01, le=1.0),
+    nms_threshold: float = Query(default=0.45, ge=0.01, le=1.0),
+    enhance: bool = Query(default=False),
+    jpeg_quality: int = Query(default=80, ge=50, le=95),
+):
+    """Real-time frame streaming endpoint with low-latency producer-consumer pipeline."""
+    await websocket.accept()
+
+    parsed_source = RealtimeVideoSession.parse_source(source)
+    session = RealtimeVideoSession(
+        source=parsed_source,
+        confidence_threshold=confidence_threshold,
+        nms_threshold=nms_threshold,
+        enhance=enhance,
+        jpeg_quality=jpeg_quality,
+        queue_size=2,
+    )
+    session.start()
+
+    async def sender_loop():
+        while not session.stop_event.is_set():
+            if session.last_error:
+                await websocket.send_text(json.dumps({"type": "error", "message": session.last_error}))
+                break
+
+            payload = await asyncio.to_thread(session.get_payload_nowait)
+            if payload is None:
+                await asyncio.sleep(0.01)
+                continue
+
+            await websocket.send_text(payload)
+            session.stats.sent += 1
+
+    async def receiver_loop():
+        while not session.stop_event.is_set():
+            msg = await websocket.receive_text()
+            if msg.strip().lower() in {"disconnect", "stop", "close"}:
+                session.stop_event.set()
+                break
+
+    sender_task = None
+    receiver_task = None
+    try:
+        sender_task = asyncio.create_task(sender_loop())
+        receiver_task = asyncio.create_task(receiver_loop())
+
+        done, pending = await asyncio.wait(
+            {sender_task, receiver_task},
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+        for task in pending:
+            task.cancel()
+
+        for task in done:
+            err = task.exception()
+            if err is not None:
+                raise err
+
+    except WebSocketDisconnect:
+        logger.info("WebSocket client disconnected")
+    except Exception as e:
+        logger.error(f"WebSocket stream error: {e}", exc_info=True)
+    finally:
+        session.stop()
+        if sender_task:
+            sender_task.cancel()
+        if receiver_task:
+            receiver_task.cancel()
+
+
 @app.post("/analyze", response_model=AnalysisResponse, tags=["Analysis"])
 @limiter.limit(f"{settings.RATE_LIMIT_PER_MINUTE}/minute")
 async def analyze_image(
     request: Request,
     file: UploadFile = File(..., description="Image file to analyze"),
-    confidence_threshold: Optional[float] = None,
-    nms_threshold: Optional[float] = None
+    confidence_threshold: Optional[float] = Form(default=None),
+    nms_threshold: Optional[float] = Form(default=None),
+    enhance: Optional[bool] = Form(default=True)
 ):
     """
     Analyze underwater image: enhance and detect objects.
@@ -269,7 +521,8 @@ async def analyze_image(
         annotated_image, detections, metadata = model_manager.analyze_image(
             image,
             confidence_threshold=confidence_threshold,
-            nms_threshold=nms_threshold
+            nms_threshold=nms_threshold,
+            enhance=bool(enhance)
         )
         
         # Save annotated image

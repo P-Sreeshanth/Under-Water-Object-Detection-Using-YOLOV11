@@ -115,12 +115,11 @@ async function checkAPIStatus() {
         if (data.status === 'healthy') {
             statusIndicator.className = 'status-indicator online';
             statusText.textContent = 'Online';
-            if (data.models.detector.classes) {
-                classCount.textContent = Object.keys(data.models.detector.classes).length;
-            }
+            classCount.textContent = Object.values(data.models_loaded || {}).filter(Boolean).length;
         } else {
             statusIndicator.className = 'status-indicator offline';
             statusText.textContent = 'Offline';
+            classCount.textContent = '0';
         }
     } catch (error) {
         const statusIndicator = document.getElementById('apiStatus');
@@ -241,8 +240,8 @@ function updateStatistics(data) {
     }
     
     // Processing time
-    const totalTime = (data.processing_time.enhancement + data.processing_time.detection) * 1000;
-    document.getElementById('processingTime').textContent = `${totalTime.toFixed(0)}ms`;
+    const totalTimeMs = (data.processing_time || 0) * 1000;
+    document.getElementById('processingTime').textContent = `${totalTimeMs.toFixed(0)}ms`;
 }
 
 function displayDetectionList(detections) {

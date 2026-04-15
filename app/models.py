@@ -141,6 +141,22 @@ class ModelManager:
         except Exception as e:
             logger.error(f"Error loading models: {e}")
             raise RuntimeError(f"Failed to load models: {e}")
+
+    def _resolve_model_path(self, configured_path: str, fallback_globs: Optional[List[str]] = None) -> Optional[Path]:
+        """Resolve a model path, optionally trying fallback glob patterns when missing."""
+        primary = Path(configured_path)
+        if primary.exists():
+            return primary
+
+        for pattern in (fallback_globs or []):
+            matches = sorted(Path(".").glob(pattern), key=lambda p: p.stat().st_mtime, reverse=True)
+            if matches:
+                logger.warning(
+                    f"Configured model path not found: {primary}. Using fallback model: {matches[0]}"
+                )
+                return matches[0]
+
+        return None
     
     def _load_enhancer(self):
         """Load the U-Net image enhancement model."""
@@ -188,10 +204,10 @@ class ModelManager:
     
     def _load_seaclear_model(self):
         """Load the Seaclear marine debris detection model."""
-        seaclear_path = Path(settings.SEACLEAR_MODEL_PATH)
-        
-        if not seaclear_path.exists():
-            logger.warning(f"Seaclear model not found at {seaclear_path}")
+        seaclear_path = self._resolve_model_path(settings.SEACLEAR_MODEL_PATH)
+
+        if seaclear_path is None:
+            logger.warning(f"Seaclear model not found at {settings.SEACLEAR_MODEL_PATH}")
             self.seaclear_model = None
             return
         
@@ -215,10 +231,16 @@ class ModelManager:
     
     def _load_aquarium_model(self):
         """Load the Aquarium animals detection model."""
-        aquarium_path = Path(settings.AQUARIUM_MODEL_PATH)
-        
-        if not aquarium_path.exists():
-            logger.warning(f"Aquarium model not found at {aquarium_path}")
+        aquarium_path = self._resolve_model_path(
+            settings.AQUARIUM_MODEL_PATH,
+            fallback_globs=[
+                "runs/dataa_yolov8/*/train/weights/best.pt",
+                "runs/detect/*/weights/best.pt",
+            ],
+        )
+
+        if aquarium_path is None:
+            logger.warning(f"Aquarium model not found at {settings.AQUARIUM_MODEL_PATH}")
             self.aquarium_model = None
             return
         
@@ -418,7 +440,8 @@ class ModelManager:
         self,
         image: np.ndarray,
         confidence_threshold: float = None,
-        nms_threshold: float = None
+        nms_threshold: float = None,
+        enhance: bool = True,
     ) -> Tuple[np.ndarray, List[Dict], Dict]:
         """
         Complete image analysis pipeline: enhance and detect.
@@ -436,7 +459,7 @@ class ModelManager:
         
         # Step 1: Enhance image
         logger.info("Starting image enhancement")
-        enhanced_image = self.enhance_image(image)
+        enhanced_image = self.enhance_image(image) if enhance else image
         enhanced_dims = {"width": enhanced_image.shape[1], "height": enhanced_image.shape[0]}
         
         # Step 2: Detect objects
@@ -452,7 +475,7 @@ class ModelManager:
             "original_dimensions": original_dims,
             "enhanced_dimensions": enhanced_dims,
             "num_detections": len(detections),
-            "enhancement_applied": self.enhancer_model is not None
+            "enhancement_applied": bool(enhance and self.enhancer_model is not None)
         }
         
         return annotated_image, detections, metadata

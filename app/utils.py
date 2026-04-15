@@ -3,6 +3,7 @@ Utility functions for image processing, logging, and configuration management.
 """
 
 import os
+import io
 import uuid
 import logging
 from typing import Tuple, Optional
@@ -31,7 +32,7 @@ class Settings(BaseSettings):
     # Model paths
     ENHANCER_MODEL_PATH: str = "models/enhancer_model.pth"
     SEACLEAR_MODEL_PATH: str = "runs/seaclear/yolov11n_seaclear/weights/best.pt"
-    AQUARIUM_MODEL_PATH: str = "runs/detect/aquarium_yolov11/weights/best.pt"  # Your aquarium trained model
+    AQUARIUM_MODEL_PATH: str = "runs/dataa_yolov8/dataa_full_v8/train/weights/best.pt"
     
     # Multi-model mode
     USE_MULTI_MODEL: bool = True  # Set to True to use both models
@@ -141,6 +142,13 @@ def load_image_from_bytes(image_bytes: bytes) -> Optional[np.ndarray]:
         nparr = np.frombuffer(image_bytes, np.uint8)
         # Decode image
         image = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if image is not None:
+            return image
+
+        # Fallback for files OpenCV cannot decode directly (e.g. some JPEG variants)
+        with Image.open(io.BytesIO(image_bytes)) as pil_image:
+            pil_rgb = pil_image.convert("RGB")
+            image = cv2.cvtColor(np.array(pil_rgb), cv2.COLOR_RGB2BGR)
         return image
     except Exception as e:
         logger.error(f"Failed to load image from bytes: {e}")

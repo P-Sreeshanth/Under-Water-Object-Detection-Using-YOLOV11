@@ -1,13 +1,25 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Upload, Loader, ScanLine } from 'lucide-react';
+import { Upload, Loader, ScanLine, Radio } from 'lucide-react';
 import './VideoCanvas.css';
 
-const VideoCanvas = ({ image, annotatedImage, detections, isAnalyzing, onImageUpload }) => {
+const VideoCanvas = ({
+  image,
+  annotatedImage,
+  streamFrame,
+  isStreamMode,
+  isStreamConnected,
+  detections,
+  isAnalyzing,
+  onImageUpload,
+  streamError,
+}) => {
+  const currentFrame = isStreamMode ? streamFrame : (annotatedImage || image);
+
   return (
     <div className="video-canvas-container">
       <div className="canvas-wrapper glow-border">
-        {!image && !annotatedImage && (
+        {!currentFrame && !isStreamMode && (
           <motion.div 
             className="upload-zone"
             onClick={onImageUpload}
@@ -25,7 +37,18 @@ const VideoCanvas = ({ image, annotatedImage, detections, isAnalyzing, onImageUp
           </motion.div>
         )}
 
-        {image && !annotatedImage && !isAnalyzing && (
+        {isStreamMode && !streamFrame && (
+          <motion.div className="upload-zone" initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+            <Radio className="upload-icon" size={56} />
+            <h3 className="upload-title">Live Stream Mode</h3>
+            <p className="upload-subtitle">
+              {isStreamConnected ? 'Waiting for frames...' : 'Connect stream from control panel'}
+            </p>
+            {streamError && <p className="stream-error">{streamError}</p>}
+          </motion.div>
+        )}
+
+        {image && !annotatedImage && !isAnalyzing && !isStreamMode && (
           <motion.div 
             className="image-preview"
             initial={{ opacity: 0 }}
@@ -41,7 +64,7 @@ const VideoCanvas = ({ image, annotatedImage, detections, isAnalyzing, onImageUp
           </motion.div>
         )}
 
-        {isAnalyzing && (
+        {isAnalyzing && !isStreamMode && (
           <motion.div 
             className="analyzing-state"
             initial={{ opacity: 0 }}
@@ -62,14 +85,14 @@ const VideoCanvas = ({ image, annotatedImage, detections, isAnalyzing, onImageUp
           </motion.div>
         )}
 
-        {annotatedImage && !isAnalyzing && (
+        {((annotatedImage && !isStreamMode) || (streamFrame && isStreamMode)) && !isAnalyzing && (
           <motion.div 
             className="result-view"
             initial={{ opacity: 0, scale: 0.95 }}
             animate={{ opacity: 1, scale: 1 }}
             transition={{ duration: 0.5 }}
           >
-            <img src={annotatedImage} alt="Detection Results" className="result-image" />
+            <img src={isStreamMode ? streamFrame : annotatedImage} alt="Detection Results" className="result-image" />
             <div className="detection-overlay">
               <div className="corner-frame top-left"></div>
               <div className="corner-frame top-right"></div>
@@ -85,7 +108,7 @@ const VideoCanvas = ({ image, annotatedImage, detections, isAnalyzing, onImageUp
         )}
 
         {/* HUD Grid Overlay */}
-        {(image || annotatedImage) && (
+        {(currentFrame || isStreamMode) && (
           <div className="hud-grid">
             <svg className="grid-svg" width="100%" height="100%">
               <defs>
@@ -100,7 +123,7 @@ const VideoCanvas = ({ image, annotatedImage, detections, isAnalyzing, onImageUp
       </div>
 
       {/* Detection Info Panel */}
-      {annotatedImage && detections.length > 0 && (
+      {(annotatedImage || streamFrame) && detections.length > 0 && (
         <motion.div 
           className="detection-info-panel"
           initial={{ y: 20, opacity: 0 }}

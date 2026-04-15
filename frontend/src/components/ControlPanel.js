@@ -1,9 +1,24 @@
 import React from 'react';
 import { motion } from 'framer-motion';
-import { Play, RefreshCw, Upload, Sliders } from 'lucide-react';
+import { Play, RefreshCw, Upload, Sliders, Radio, Link, Link2Off, Image as ImageIcon } from 'lucide-react';
 import './ControlPanel.css';
 
-const ControlPanel = ({ settings, setSettings, onAnalyze, onClear, isAnalyzing, hasImage, fileInputRef, onFileChange }) => {
+const ControlPanel = ({
+  settings,
+  setSettings,
+  mode,
+  setMode,
+  streamSource,
+  setStreamSource,
+  onConnectStream,
+  onDisconnectStream,
+  isStreamConnected,
+  onAnalyze,
+  onClear,
+  isAnalyzing,
+  hasImage,
+  fileInputRef,
+}) => {
   return (
     <motion.div 
       className="control-panel"
@@ -15,14 +30,67 @@ const ControlPanel = ({ settings, setSettings, onAnalyze, onClear, isAnalyzing, 
       </div>
 
       <div className="panel-content">
+        <div className="mode-switcher">
+          <button
+            className={`mode-btn ${mode === 'image' ? 'active' : ''}`}
+            onClick={() => setMode('image')}
+            type="button"
+          >
+            <ImageIcon size={16} />
+            <span>Image Mode</span>
+          </button>
+          <button
+            className={`mode-btn ${mode === 'stream' ? 'active' : ''}`}
+            onClick={() => setMode('stream')}
+            type="button"
+          >
+            <Radio size={16} />
+            <span>Live Stream</span>
+          </button>
+        </div>
+
         {/* Upload Button */}
         <button 
           className="control-button upload-btn"
           onClick={() => fileInputRef.current?.click()}
+          disabled={mode !== 'image'}
         >
           <Upload size={20} />
           <span>Upload Image</span>
         </button>
+
+        {mode === 'stream' && (
+          <div className="stream-controls">
+            <label className="stream-label">Stream Source (camera index, file, or RTSP URL)</label>
+            <input
+              type="text"
+              value={streamSource}
+              onChange={(e) => setStreamSource(e.target.value)}
+              className="stream-input"
+              placeholder="0 or rtsp://..."
+            />
+            <div className="stream-buttons">
+              <button
+                className="control-button analyze-btn"
+                onClick={onConnectStream}
+                disabled={isStreamConnected}
+                type="button"
+              >
+                <Link size={18} />
+                <span>Connect</span>
+              </button>
+              <button
+                className="control-button clear-btn"
+                onClick={onDisconnectStream}
+                disabled={!isStreamConnected}
+                type="button"
+              >
+                <Link2Off size={18} />
+                <span>Disconnect</span>
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Confidence Threshold */}
         <div className="control-group">
@@ -67,7 +135,7 @@ const ControlPanel = ({ settings, setSettings, onAnalyze, onClear, isAnalyzing, 
           <button 
             className="control-button analyze-btn"
             onClick={onAnalyze}
-            disabled={!hasImage || isAnalyzing}
+            disabled={!hasImage || isAnalyzing || mode !== 'image'}
           >
             {isAnalyzing ? (
               <>
@@ -85,7 +153,7 @@ const ControlPanel = ({ settings, setSettings, onAnalyze, onClear, isAnalyzing, 
           <button 
             className="control-button clear-btn"
             onClick={onClear}
-            disabled={!hasImage}
+            disabled={!hasImage && !isStreamConnected}
           >
             <RefreshCw size={20} />
             <span>Clear</span>
@@ -97,6 +165,10 @@ const ControlPanel = ({ settings, setSettings, onAnalyze, onClear, isAnalyzing, 
           <div className="info-item">
             <span className="info-label">Models Active</span>
             <span className="info-value">Seaclear + Aquarium</span>
+          </div>
+          <div className="info-item">
+            <span className="info-label">Stream Status</span>
+            <span className="info-value">{isStreamConnected ? 'Connected' : 'Idle'}</span>
           </div>
           <div className="info-item">
             <span className="info-label">Total Classes</span>

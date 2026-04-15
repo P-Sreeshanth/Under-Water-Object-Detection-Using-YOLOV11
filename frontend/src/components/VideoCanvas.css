@@ -52,6 +52,17 @@
   margin-bottom: 20px;
 }
 
+.stream-error {
+  margin-top: 12px;
+  color: #ff6b7a;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 107, 122, 0.35);
+  background: rgba(255, 0, 64, 0.1);
+  border-radius: 8px;
+}
+
 .upload-formats {
   display: flex;
   gap: 10px;

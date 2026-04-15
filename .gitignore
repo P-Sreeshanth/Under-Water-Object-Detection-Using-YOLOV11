@@ -157,3 +157,6 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Local Python env
+.venv310/
