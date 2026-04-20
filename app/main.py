@@ -78,6 +78,7 @@ class RealtimeVideoSession:
         confidence_threshold: float,
         nms_threshold: float,
         enhance: bool,
+        use_phi4: bool,
         jpeg_quality: int = 80,
         queue_size: int = 2,
     ):
@@ -85,6 +86,7 @@ class RealtimeVideoSession:
         self.confidence_threshold = confidence_threshold
         self.nms_threshold = nms_threshold
         self.enhance = enhance
+        self.use_phi4 = use_phi4
         self.jpeg_quality = int(jpeg_quality)
         self.stop_event = threading.Event()
 
@@ -173,6 +175,7 @@ class RealtimeVideoSession:
                     confidence_threshold=self.confidence_threshold,
                     nms_threshold=self.nms_threshold,
                     enhance=self.enhance,
+                    use_phi4=self.use_phi4,
                 )
 
                 self.stats.processed += 1
@@ -346,14 +349,18 @@ async def health_check():
     """
     global model_manager
     
-    models_loaded = {"enhancer": False, "seaclear": False}
+    models_loaded = {"enhancer": False, "detector": False, "seaclear": False}
     
     if model_manager is not None:
         models_loaded = model_manager.is_ready()
     
     # Determine health status
     # System is healthy if at least seaclear model is loaded
-    has_detection_model = models_loaded.get("seaclear", False) or models_loaded.get("aquarium", False)
+    has_detection_model = (
+        models_loaded.get("detector", False)
+        or models_loaded.get("seaclear", False)
+        or models_loaded.get("aquarium", False)
+    )
     status = "healthy" if has_detection_model else "degraded"
     
     return HealthResponse(
@@ -375,7 +382,11 @@ async def get_config():
         max_file_size_mb=settings.MAX_FILE_SIZE_MB,
         confidence_threshold=settings.CONFIDENCE_THRESHOLD,
         nms_threshold=settings.NMS_THRESHOLD,
-        allowed_formats=settings.ALLOWED_EXTENSIONS
+        allowed_formats=settings.ALLOWED_EXTENSIONS,
+        use_multi_model=settings.USE_MULTI_MODEL,
+        auto_discover_yolo_models=settings.AUTO_DISCOVER_YOLO_MODELS,
+        phi4_enabled=settings.PHI4_ENABLED,
+        phi4_model_name=settings.PHI4_MODEL_NAME,
     )
 
 
@@ -386,6 +397,7 @@ async def websocket_stream(
     confidence_threshold: float = Query(default=0.25, ge=0.01, le=1.0),
     nms_threshold: float = Query(default=0.45, ge=0.01, le=1.0),
     enhance: bool = Query(default=False),
+    use_phi4: bool = Query(default=False),
     jpeg_quality: int = Query(default=80, ge=50, le=95),
 ):
     """Real-time frame streaming endpoint with low-latency producer-consumer pipeline."""
@@ -397,6 +409,7 @@ async def websocket_stream(
         confidence_threshold=confidence_threshold,
         nms_threshold=nms_threshold,
         enhance=enhance,
+        use_phi4=use_phi4,
         jpeg_quality=jpeg_quality,
         queue_size=2,
     )
@@ -460,7 +473,8 @@ async def analyze_image(
     file: UploadFile = File(..., description="Image file to analyze"),
     confidence_threshold: Optional[float] = Form(default=None),
     nms_threshold: Optional[float] = Form(default=None),
-    enhance: Optional[bool] = Form(default=True)
+    enhance: Optional[bool] = Form(default=True),
+    use_phi4: Optional[bool] = Form(default=None),
 ):
     """
     Analyze underwater image: enhance and detect objects.
@@ -522,7 +536,8 @@ async def analyze_image(
             image,
             confidence_threshold=confidence_threshold,
             nms_threshold=nms_threshold,
-            enhance=bool(enhance)
+            enhance=bool(enhance),
+            use_phi4=use_phi4,
         )
         
         # Save annotated image
@@ -537,7 +552,10 @@ async def analyze_image(
             DetectionResult(
                 class_name=det['class_name'],
                 confidence=det['confidence'],
-                bbox=det['bbox']
+                bbox=det['bbox'],
+                model=det.get('model'),
+                phi4_checked=det.get('phi4_checked'),
+                phi4_verified=det.get('phi4_verified'),
             )
             for det in detections
         ]
@@ -580,7 +598,9 @@ async def analyze_batch(
     request: Request,
     files: list[UploadFile] = File(..., description="Multiple image files to analyze"),
     confidence_threshold: Optional[float] = None,
-    nms_threshold: Optional[float] = None
+    nms_threshold: Optional[float] = None,
+    enhance: Optional[bool] = True,
+    use_phi4: Optional[bool] = None,
 ):
     """
     Analyze multiple underwater images in batch.
@@ -609,7 +629,9 @@ async def analyze_batch(
                 request=request,
                 file=file,
                 confidence_threshold=confidence_threshold,
-                nms_threshold=nms_threshold
+                nms_threshold=nms_threshold,
+                enhance=enhance,
+                use_phi4=use_phi4,
             )
             results.append(result)
         except Exception as e:

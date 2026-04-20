@@ -73,7 +73,7 @@ def get_detectable_classes():
         print(f"Error: Could not retrieve classes")
 
 
-def analyze_image(image_path, confidence_threshold=0.5, nms_threshold=0.45):
+def analyze_image(image_path, confidence_threshold=0.5, nms_threshold=0.45, use_phi4=None):
     """
     Analyze an underwater image.
     
@@ -98,6 +98,8 @@ def analyze_image(image_path, confidence_threshold=0.5, nms_threshold=0.45):
             'confidence_threshold': confidence_threshold,
             'nms_threshold': nms_threshold
         }
+        if use_phi4 is not None:
+            data['use_phi4'] = bool(use_phi4)
         
         print(f"Uploading image...")
         response = requests.post(

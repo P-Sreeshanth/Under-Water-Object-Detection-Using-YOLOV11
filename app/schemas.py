@@ -12,6 +12,9 @@ class DetectionResult(BaseModel):
     class_name: str = Field(..., description="Name of the detected class")
     confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence score")
     bbox: List[int] = Field(..., description="Bounding box coordinates [x_min, y_min, x_max, y_max]")
+    model: Optional[str] = Field(None, description="Model tag that produced the detection")
+    phi4_checked: Optional[bool] = Field(None, description="Whether Phi-4 verification was applied")
+    phi4_verified: Optional[bool] = Field(None, description="Phi-4 verification verdict when checked")
     
     @validator('bbox')
     def validate_bbox(cls, v):
@@ -116,6 +119,10 @@ class ConfigResponse(BaseModel):
     confidence_threshold: float = Field(..., description="Detection confidence threshold")
     nms_threshold: float = Field(..., description="Non-Maximum Suppression IoU threshold")
     allowed_formats: List[str] = Field(..., description="Allowed image formats")
+    use_multi_model: bool = Field(..., description="Whether configured multi-model mode is enabled")
+    auto_discover_yolo_models: bool = Field(..., description="Whether .pt model auto-discovery is enabled")
+    phi4_enabled: bool = Field(..., description="Whether Phi-4 verification stage is enabled")
+    phi4_model_name: Optional[str] = Field(None, description="Configured Phi-4 model identifier")
     
     class Config:
         schema_extra = {
@@ -123,6 +130,10 @@ class ConfigResponse(BaseModel):
                 "max_file_size_mb": 10.0,
                 "confidence_threshold": 0.5,
                 "nms_threshold": 0.45,
-                "allowed_formats": ["jpg", "jpeg", "png", "bmp"]
+                "allowed_formats": ["jpg", "jpeg", "png", "bmp"],
+                "use_multi_model": True,
+                "auto_discover_yolo_models": True,
+                "phi4_enabled": False,
+                "phi4_model_name": "phi4-multimodal"
             }
         }

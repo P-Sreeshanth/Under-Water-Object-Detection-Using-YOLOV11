@@ -36,6 +36,19 @@ class Settings(BaseSettings):
     
     # Multi-model mode
     USE_MULTI_MODEL: bool = True  # Set to True to use both models
+    AUTO_DISCOVER_YOLO_MODELS: bool = True
+    YOLO_MODEL_GLOB_PATTERNS: str = "runs/**/weights/*.pt,models/*.pt,yolo11*.pt"
+
+    # Optional Phi-4 multimodal verification stage
+    PHI4_ENABLED: bool = False
+    PHI4_PROVIDER: str = "ollama"
+    PHI4_MODEL_NAME: str = "phi4-multimodal"
+    PHI4_OLLAMA_URL: str = "http://localhost:11434/api/chat"
+    PHI4_TIMEOUT_SECONDS: float = 20.0
+    PHI4_VERIFY_MIN_CONFIDENCE: float = 0.05
+    PHI4_VERIFY_MAX_CONFIDENCE: float = 0.55
+    PHI4_MAX_CHECKS_PER_IMAGE: int = 6
+    PHI4_BOX_PADDING: int = 12
     
     # Detection settings
     CONFIDENCE_THRESHOLD: float = 0.25  # Lowered for better recall on Seaclear dataset

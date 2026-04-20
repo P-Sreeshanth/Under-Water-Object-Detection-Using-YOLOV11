@@ -93,7 +93,18 @@ LOG_LEVEL=INFO
 
 # Model Paths
 ENHANCER_MODEL_PATH=models/enhancer_model.pth
-DETECTOR_MODEL_PATH=models/best.pt
+SEACLEAR_MODEL_PATH=runs/seaclear/yolov11n_seaclear/weights/best.pt
+AQUARIUM_MODEL_PATH=runs/dataa_yolov8/dataa_full_v8/train/weights/best.pt
+
+# Load all .pt detectors
+AUTO_DISCOVER_YOLO_MODELS=True
+YOLO_MODEL_GLOB_PATTERNS=runs/**/weights/*.pt,models/*.pt,yolo11*.pt
+
+# Optional Phi-4 multimodal verifier (Ollama)
+PHI4_ENABLED=False
+PHI4_PROVIDER=ollama
+PHI4_MODEL_NAME=phi4-multimodal
+PHI4_OLLAMA_URL=http://localhost:11434/api/chat
 
 # Detection Settings
 CONFIDENCE_THRESHOLD=0.5
@@ -114,7 +125,12 @@ RATE_LIMIT_PER_MINUTE=60
 | `PORT` | Server port number | 8000 |
 | `LOG_LEVEL` | Logging level (DEBUG, INFO, WARNING, ERROR) | INFO |
 | `ENHANCER_MODEL_PATH` | Path to U-Net enhancement model | models/enhancer_model.pth |
-| `DETECTOR_MODEL_PATH` | Path to YOLOv11 detection model | models/best.pt |
+| `SEACLEAR_MODEL_PATH` | Preferred Seaclear detector path | runs/seaclear/yolov11n_seaclear/weights/best.pt |
+| `AQUARIUM_MODEL_PATH` | Preferred Aquarium detector path | runs/dataa_yolov8/dataa_full_v8/train/weights/best.pt |
+| `AUTO_DISCOVER_YOLO_MODELS` | Auto-load all matching .pt detector weights | True |
+| `YOLO_MODEL_GLOB_PATTERNS` | Comma-separated glob patterns for detector discovery | runs/**/weights/*.pt,models/*.pt,yolo11*.pt |
+| `PHI4_ENABLED` | Enable Phi-4 verification for uncertain detections | False |
+| `PHI4_MODEL_NAME` | Phi-4 multimodal model identifier | phi4-multimodal |
 | `CONFIDENCE_THRESHOLD` | Minimum confidence for detections | 0.5 |
 | `NMS_THRESHOLD` | IoU threshold for Non-Maximum Suppression | 0.45 |
 | `MAX_FILE_SIZE_MB` | Maximum upload file size in MB | 10.0 |
